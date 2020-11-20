@@ -1,0 +1,120 @@
+---
+title: "Cousera Pratical Machine Learning - Final Project"
+author: "Marcelo Souza Pitombo"
+date: "20/11/2020"
+output: html_document
+---
+
+## Introduction
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. The goal of this coursework will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways.
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har
+
+```{r}
+
+trainfn = "training.csv"
+testfn = "testing.csv"
+
+if(!file.exists(trainfn))
+{
+    download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", destfile = trainfn)
+}
+
+if(!file.exists(testfn))
+{
+    download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", destfile = testfn)
+}
+
+
+#Read the training data and replace empty values by NA
+trainDf <- read.csv(trainfn, sep=",", header=TRUE, na.strings = c("NA","",'#DIV/0!'))
+testDf <- read.csv(testfn, sep=",", header=TRUE, na.strings = c("NA","",'#DIV/0!'))
+dim(trainDf)
+
+```
+So, we have the dataset sized as follows: 19622 rows and 160 columns.
+
+## Cleaning the data
+
+
+We observed a lot of columns filled with N/A only. We need to remove them..
+
+```{r}
+trainDf <- trainDf[, colSums(is.na(trainDf)) == 0]
+testDf <- testDf[, colSums(is.na(testDf)) == 0]
+dim(trainDf)
+
+```
+
+## Preparing the Data for "t-statistics"
+
+In order to t-test our data, we have to remove all non-numerical columns to compute and show the statistics for each class and variable.
+
+```{r}
+library(dplyr)
+```
+
+```{r}
+numer <- which(lapply(trainDf, class) == "numeric")
+names(numer) <- NULL
+class = trainDf$classe
+trainDf <- trainDf[, numer]
+trainDf$classe <- class
+mean_s <- trainDf
+std_s <- trainDf
+meanToSd <- trainDf
+names(trainDf)
+```
+
+```{r}
+# https://stackoverflow.com/questions/21644848/summarizing-multiple-columns-with-dplyr
+mean_s <- mean_s %>% group_by(classe) %>% summarise_all(funs(mean))
+std_s <- std_s %>% group_by(classe) %>% summarise_all(funs(sd))
+mean_to_sd <- function(x){mean(x)/sd(x)}
+meanToSd <- meanToSd %>% group_by(classe) %>% summarise_all(funs(mean_to_sd))
+meanToSd
+```
+
+```{r}
+testDf <- testDf[, numer]
+```
+
+Now our training set has 28 columns!
+
+## Splitting our Data
+
+Let's split our data into test and training as a ratio of 30:70
+
+```{r}
+library(caret)
+```
+
+```{r}
+split<- createDataPartition(trainDf$classe, p=0.7, list=FALSE)
+training <- trainDf[split, ]
+validation <- trainDf[- split, ]
+dim(training)
+```
+
+```{r}
+dim(validation)
+```
+## Train and test the model
+
+Let's show the accuracy of the prediction on the train data. After that, we will apply Random forests and see that is the algorithm with best performance within the default settings. Train the model with random forests, use cross-validation for tree fitting. Predict the validation set labels and show its confusion matrix.
+
+```{r}
+# https://machinelearningmastery.com/feature-selection-with-the-caret-r-package/
+fit1 <- train(classe ~., method="rf", data=training, trControl=trainControl(method='cv'), number=5, allowParallel=TRUE)
+pred1 <- predict(fit1, validation)
+confusionMatrix(pred1, validation$classe)
+print(paste0("Accuracy = ", confusionMatrix(pred1, validation$classe)$overall['Accuracy']))
+```
+
+## Make prediction
+```{r}
+pred2 <- predict(fit1, testDf)
+pred2
+```
+So, prediction for the first 20 cases is: B, A, B, A, A, E, D, B, A, A, B, C, B, A, E, E, A, B, B, B
